@@ -1,0 +1,12 @@
+version: "3.9"
+services:
+  react:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # If you use Vite, uncomment this:
+      # args:
+      #   BUILD_DIR: dist
+    ports:
+      - "80:80"
+    restart: unless-stopped
