@@ -1,0 +1,79 @@
+# This workflow will run tests using node and then publish a package to GitHub Packages when a release is created
+# For more information see: https://docs.github.com/en/actions/publishing-packages/publishing-nodejs-packages
+
+name: Node.js Package
+
+on:
+  push:
+    branches: ["*"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm i
+      - run: npm test
+      
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm i
+      - run: npm run build
+
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install SSH key
+        run: |
+          echo "${{ secrets.EC2_KEY }}" > key.pem
+          chmod 600 key.pem
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy on EC2
+        env:
+          APP_DIR: ${{ secrets.APP_DIR }}                  # e.g. /home/ubuntu/react-app
+          REPO:    ${{ github.repository }}                # owner/repo
+        run: |
+          # Install key & known_hosts
+          echo "${{ secrets.EC2_KEY }}" > key.pem
+          chmod 600 key.pem
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+      
+          # Run remote script, passing env vars in the command line
+          ssh -T -i key.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} APP_DIR="$APP_DIR" REPO="$REPO" 'bash -s' <<'EOSSH'
+            set -euo pipefail
+      
+            if [ -z "${APP_DIR:-}" ] || [ -z "${REPO:-}" ]; then
+              echo "APP_DIR or REPO is empty. Check your GitHub Action env/secrets." >&2
+              exit 1
+            fi
+      
+            # Ensure parent exists, then clone if missing
+            mkdir -p "$(dirname "$APP_DIR")"
+            if [ ! -d "$APP_DIR/.git" ]; then
+              git clone "https://github.com/$REPO.git" "$APP_DIR"
+            fi
+      
+            cd "$APP_DIR"
+            git fetch origin main
+            git reset --hard origin/main
+      
+            # Build & run (compose and .env must be in this directory)
+            sudo docker compose build
+            sudo docker compose up -d --remove-orphans
+      
+            # Show status
+            sudo docker compose ps
+          EOSSH
