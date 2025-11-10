@@ -12,5 +12,11 @@
     "allowJs": true,
     "noUnusedLocals": false,
     "strictNullChecks": false
-  }
+  },
+  "include": [
+    "src",
+    "src/__tests__/**/*.test.ts",
+    "src/__tests__/**/*.test.tsx",
+    "src/__tests__/setupTests.ts"
+  ]
 }
